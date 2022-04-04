@@ -9,37 +9,6 @@ import socket
 import threading
 import random
 
-# void sequence_check(string current_packet)
-# {
-# 	if(received_packets.empty())
-# 	{
-# 		received_packets.push_back(stoi(current_packet));
-# 		return;
-# 	}
-# 	deque<int>::iterator it;
-# 	it=received_packets.begin();
-# 	//cout<<"At the beginning of the loop"<<" "<<received_packets[0]<<" "<<received_packets[1]<<" "<<received_packets[2]<<" "<<received_packets[received_packets.size()-1]<<endl;
-#     while(it<received_packets.end())
-# 	{
-# 		if(*it>stoi(current_packet))
-# 		{
-# 			received_packets.insert(it,stoi(current_packet));
-# 			break;
-# 		}
-# 		it++;
-#     }
-# 	//it=received_packets.begin();
-# 	while(it<received_packets.end()-1)
-# 	{
-# 		it=received_packets.begin();
-# 		if((*it+packet_size)%65537==*(it+1))
-# 			received_packets.erase(received_packets.begin());
-# 		else
-# 			break;
-# 	}
-# 	//cout<<"At the end of the loop"<<" "<<received_packets[0]<<" "<<received_packets[1]<<" "<<received_packets[2]<<" "<<received_packets[received_packets.size()-1]<<endl;
-# }
-
 received_packets = deque([])
 packet_size=1
 
@@ -89,18 +58,20 @@ if __name__ == "__main__":
 
     # a forever loop until we interrupt it or
     # an error occurs
+    c, addr = s.accept()
     while True:
 
-    # Establish connection with client.
-        c, addr = s.accept()	
+    # Establish connection with client.	
         print ('Got connection from', addr )
-        data=str(s.recv(1024).decode('utf8'))
-        if checkIfDropped():
-            sequence_check(int(data))
-            # send a thank you message to the client. encoding to send byte type.
-            msg=(str(data).encode('utf8'))
-            c.send(msg)
-            # Close the connection with the client
-            c.close()
-            # Breaking once connection closed
-            # break
+        data=str(c.recv(1024).decode('utf8'))
+        for d in data.split(' ')[:-1]:
+            if checkIfDropped():
+                sequence_check(int(d))
+                print(f'\nSequence number "{d}" received\n')
+                # send a thank you message to the client. encoding to send byte type.
+                msg=(str(d)+' ').encode('utf8')
+                c.send(msg)
+                # Close the connection with the client
+                #c.close()
+                # Breaking once connection closed
+                # break
