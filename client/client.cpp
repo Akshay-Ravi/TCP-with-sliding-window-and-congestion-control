@@ -9,8 +9,8 @@
 #include <chrono>
 #include <sys/time.h>
 #include<unordered_set>
-#define PORT 8080
-#define MAX 8000
+#define PORT 8085
+#define MAX 10
 #include <unistd.h>
 #include <thread>
 #include <string>
@@ -28,6 +28,8 @@ int window_size=15;
 int seq_counter=1;
 int packet_size=1;
 int window_increment=0;
+void processAck(int sockfd);
+void timer_window_resize(int sockfd);
 
 long int sys_time()
 {
@@ -38,41 +40,39 @@ long int sys_time()
 
 void sendPackets(int sockfd)
 {
+	string buff[MAX];
 	while(1)
 	{
 		if(client_window.size()<window_size)
 		{
-			// std::string tmp = std::to_string(seq_counter);
-    		// char const *num_char= tmp.c_str();
-
-			std::string num_char = std::to_string(seq_counter);
-
-			pair<string,long int>p;
-			p.first=num_char;
-			//get current system time
-			p.second=sys_time();
-			client_window.push_back(p); //adding the sequnce number to the deque
-			string buff[1];
+			string prt="";
 			bzero(buff, sizeof(buff));
-			buff[0]=num_char;
-			write(sockfd, buff, sizeof(buff)); // comment for local
-			string prt="\nSequence number "+num_char+" sent from the client to the server\n";
-			cout<<prt<<endl;
+			int i=0;
 
+		//	while(client_window.size()<window_size)
+			{
+				std::string num_char = std::to_string(seq_counter);
+				pair<string,long int>p;
+				p.first=num_char;
+				//get current system time
+				p.second=sys_time();
+				client_window.push_back(p); //adding the sequnce number to the deque
+				buff[i++]=num_char;
+				prt="\nSequence number "+num_char+" sent from the client to the server\n";
+				cout<<prt<<endl;
+				seq_counter=(seq_counter+packet_size)%65537;
+			}
 					
-			prt="Client Window-";
-			for(auto x:client_window)
-				prt=prt+x.first+":"+std::to_string(x.second)+" ";
-			cout<<prt<<endl;
-
-			seq_counter=seq_counter+packet_size;
+			write(sockfd, buff, sizeof(buff)); // comment for local
+			// prt="Client Window-";
+			// for(auto x:client_window)
+			// 	prt=prt+x.first+":"+std::to_string(x.second)+" ";
+			// cout<<prt<<endl;
 		}
 
-		// take it slow
-		unsigned int microsecond = 1000000;
+		//take it slow
+		unsigned int microsecond = 1000000/2;
 		usleep(1 * microsecond);//sleeps for 3 second
-
-
 	}
 }
 
@@ -81,27 +81,19 @@ void sendPackets(int sockfd)
 unordered_set<string>extra_ack;
 void processAck(int sockfd)
 {
-	
 	string buff[1];
 	bzero(buff,sizeof(buff));
 	while(1)  // comment for local
 	{  // comment for local
 		read(sockfd, buff, sizeof(buff)); // comment for local
-	// for(string i:input)
+	 if(buff[0]!="\0")
 	 {
-		// if(i.compare("6")==0)
-		// {
-		// 	unsigned int microsecond = 10000000;
-		// 	usleep(1 * microsecond);//sleeps for 3 second
-		// }
-		//buff[0]=i; 
-
-		string prt="Processing Ack for Seq No:"+buff[0];
+		string prt="Processing Ack for Seq No:"+buff[0]+"\n";
 		cout<<prt<<endl;
-		prt=" Extra Acknowledgement-";
-		for(auto x:extra_ack)
-			prt=prt+x+" ";
-		cout<<prt<<endl;
+		// prt=" Extra Acknowledgement-";
+		// for(auto x:extra_ack)
+		// 	prt=prt+x+" ";
+		// cout<<prt<<endl;
 
 		if(buff[0]!="\0" && buff[0].compare(client_window.front().first)==0)
 		{
@@ -118,92 +110,146 @@ void processAck(int sockfd)
 			extra_ack.insert(buff[0]);
 			//
 		}
+		timer_window_resize(sockfd);
 	 }
-
-	 	// take it slow
-		unsigned int microsecond = 1000000;
-		usleep(1 * microsecond);//sleeps for 3 second
-
 	}  // comment for local
 }
+
+
+void processAck1(int sockfd)
+{
+	string buff[1];
+	bzero(buff,sizeof(buff));
+	while(1)  // comment for local
+	{  // comment for local
+		read(sockfd, buff, sizeof(buff)); // comment for local
+	 if(buff[0]!="\0")
+	 {
+		while(buff[0]!="\0" && stoi(buff[0])>stoi(client_window.front().first))
+		{
+			string prt="Processing Ack for Seq No:"+buff[0]+"\n";
+			cout<<prt<<endl;
+			client_window.pop_front();
+			timer_window_resize(sockfd);
+		}
+	 }
+	}  // comment for local
+}
+
+
 
 int timeout_ms=10000;
 //bool congestion=false;
 long int last_window_resize_ms=sys_time();
+
+
 void timer(int sockfd)
 {
 	while(1)
 	{
-		for(int i=0;i<client_window.size();i++)
+		int i=0;
+		//for(int i=0;i<client_window.size();i++)
 		{
-			if(sys_time()-client_window[i].second>timeout_ms)
+			string prt="For Retrans:";
+			for(auto x:client_window)
+					prt=prt+x.first+":"+std::to_string(x.second)+" ";
+			//cout<<prt<<endl;
+			if( !client_window.empty() && sys_time()-client_window[i].second>timeout_ms)
 			{
-				cout<<"Delay "<<sys_time()-client_window[i].second<<endl;
+				//cout<<"Delay "<<sys_time()-client_window[i].second<<endl;
 				//last_window_resize_ms=sys_time();
+				string packet_num=client_window[i].first;
+				int first_trans_time=client_window[i].second;
+				string first_trans_time_str=to_string(client_window[i].second);
+				prt="\nPacket number: "+packet_num+" lost "+ to_string(sys_time())+" "+first_trans_time_str;
+				cout<<prt<<endl;
+				if(first_trans_time!=0 && first_trans_time_str.compare("0")!=0 && first_trans_time_str!="0")
+				{
 				string buff[1];
 				bzero(buff, sizeof(buff));
 				buff[0]=client_window[i].first;
 				//update the time of the retransmitted packet before sending it
 				client_window[i].second=sys_time();
-				string prt="Retran Cl Window-";
+				prt="Retran Cl Window-";
 				for(auto x:client_window)
 					prt=prt+x.first+":"+std::to_string(x.second)+" ";
 				cout<<prt<<endl;
 				write(sockfd,buff,sizeof(buff)); // comment for local
-				//window_size=window_size/2;
+				window_size=window_size/2;
 				window_increment=1;
+				}
 			}
 		}
 	}
 }
 
-int window_timeout_ms=20000;
 
-void timer_window_resize(int sockfd)
+void timer1(int sockfd)
 {
+	string missed_buff[1];
+	bzero(missed_buff,sizeof(missed_buff));
+	string prt="";
 	while(1)
 	{
-		if(sys_time()-last_window_resize_ms>window_timeout_ms)
-		{
-			string prt="\nResizing Window from "+to_string(window_size);
-			//if congestion happened
-			if(window_increment==0)
-				window_size=window_size*2;
-			else
-				window_size=window_size+1;
-			prt+=" to "+to_string(window_size)+"\n";
-			cout<<prt;
+		read(sockfd, missed_buff, sizeof(missed_buff)); // comment for local
+	 	if(missed_buff[0]!="\0")
+	 	{
+				prt="\nPacket number: "+missed_buff[0]+" lost\n";
+				cout<<prt<<endl;
+				string buff[1];
+				bzero(buff, sizeof(buff));
+				buff[0]=missed_buff[0];
+				prt="Retran Cl Window-";
+				for(auto x:client_window)
+					prt=prt+x.first+":"+std::to_string(x.second)+" ";
+				cout<<prt<<endl;
+				write(sockfd,buff,sizeof(buff)); // comment for local
+				window_size=window_size/2;
+				window_increment=1;
 		}
 	}
 }
 
-void func(int sockfd)
+
+
+int window_timeout_ms=3000;
+
+void timer_window_resize(int sockfd)
 {
-	char buff[MAX];
-	int n;
-	//for (;;) {
-		bzero(buff, sizeof(buff));
-		printf("Enter the string : ");
-		n = 0;
-
-		// Reading into buffer until a Enter keyword is hit
-		while ((buff[n++] = getchar()) != '\n');
-		// Write from buffer to the Socket
-		write(sockfd, buff, sizeof(buff));
-		// Clean the buffer
-		bzero(buff, sizeof(buff));
-		// Read from sockfd to the buffer
-		read(sockfd, buff, sizeof(buff));
-		// Print the message
-		printf("From Server : %s", buff);
-
-		// Check if the server has sent an exit keyword, if yes then close the connection
-		if ((strncmp(buff, "exit", 4)) == 0) {
-			printf("Client Exit...\n");
-			//break;
-		}
-	//}
+	//while(1)
+	{
+		// if(sys_time()-last_window_resize_ms>window_timeout_ms)
+		// {
+			last_window_resize_ms=sys_time();
+			string prt="\nResizing Window from "+to_string(window_size);
+			//if congestion happened
+			int new_window_size=0;
+			if(window_increment==0)
+				new_window_size=window_size*2;
+			else
+				new_window_size=window_size+1;
+	
+			if(new_window_size>=MAX)
+			{
+				window_size=MAX;
+				// prt+=" to "+to_string(window_size)+"\n";
+				// cout<<prt;
+				//break;
+			}
+			else if(new_window_size<=0)
+			{
+				window_size=1;
+			}
+			else
+			{
+				window_size=new_window_size;
+			}
+			prt+=" to "+to_string(window_size)+"\n";
+			cout<<prt;
+		//}
+	}
 }
+
 
 int main()
 {
@@ -227,7 +273,7 @@ int main()
 
 	// assign IP, PORT
 	servaddr.sin_family = AF_INET; // AF_INET Denoted IPV4
-	servaddr.sin_addr.s_addr = inet_addr("10.0.0.100");
+	servaddr.sin_addr.s_addr = inet_addr("10.0.0.182");
 	//servaddr.sin_addr.s_addr = inet_addr("192.168.76.166");
 
 	// converts port i.e.8080 here to 16 bit network byte order
@@ -257,7 +303,7 @@ int main()
 		thread t2(processAck,sockfd);
 
 		thread t3(timer,sockfd);
-		thread t4(timer_window_resize,sockfd);
+	//	thread t4(timer_window_resize,sockfd);
 		string str;
 		// for(int i=0;i<100;i++)
 		// {
@@ -269,7 +315,7 @@ int main()
 		t1.join();
 		t2.join();
 		t3.join();
-		t4.join();
+	//	t4.join();
 	// close the socket
 	//close(sockfd);
 }
