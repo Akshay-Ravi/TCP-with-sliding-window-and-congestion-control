@@ -10,8 +10,11 @@ import threading
 import random
 received_packets=deque([]) #dequeue for the received packets
 packet_size=5 #setting packet size to 5
+wrap_around=65536 # Setting Wrap around to 2^16
+
 def sys_time(): #calculating the system time
     return int(round(time.time()*1000))
+
 def sequence_check(current_packet): #checking if the packets are arriving in order
     if len(received_packets)==0: #if the queue is empty, add the current packet
         received_packets.append(current_packet)
@@ -22,16 +25,18 @@ def sequence_check(current_packet): #checking if the packets are arriving in ord
             break
     i=0
     while i < len(received_packets)-1:
-        if (received_packets[i]+packet_size)%65536==received_packets[i+1]: #applying the wraparound
+        if (received_packets[i]+packet_size)%wrap_around==received_packets[i+1]: #applying the wraparound
             received_packets.popleft()
         else:
             break
+
 def checkIfDropped(): #randomized dropping of 1 packet for every 100 packets
     x=random.randint(1,100)
     if x==100:
         return False
     else:
         return True 
+
 if __name__=="__main__":
     s=socket.socket(socket.AF_INET,socket.SOCK_STREAM) #initializing the socket
     print ("Socket successfully created")
@@ -57,10 +62,8 @@ if __name__=="__main__":
 
     while True:
     # Establish connection with client.	
-        #print ('Got connection from',addr)
         print(f'\nTotal Packets "{total_packets}" received\n')
         data=str(c.recv(1024).decode('utf8')).strip()
-        #print(data,"\n")
         for d in data.split(' '):
             if checkIfDropped(): #first check if the packet has been dropped
                 sequence_check(int(d)) #call the sequence order checking function
@@ -74,7 +77,7 @@ if __name__=="__main__":
                 file2.write(str(d)+','+str(sys_time())+'\n')
             no_of_packets_sent+=1
             total_packets+=1
-            if no_of_packets_received==1000: #calculating goodput
+            if no_of_packets_received==1000: #calculating goodput after every 1000 packets received
                 file3.write(str(no_of_packets_received)+"/"+str(no_of_packets_sent)+"="+str(no_of_packets_received/no_of_packets_sent)+"\n")
                 no_of_packets_sent=0
                 no_of_packets_received=0

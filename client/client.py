@@ -12,7 +12,7 @@ seq_counter=0 #the sequence numbers that we are sening to the server
 window_size=15 #Setting window size to 15
 packet_size=5 #Size of each packet
 extra_ack=[]
-wrap_around=65536
+wrap_around=65536 # Setting Wrap around to 2^16
 
 #function to generate the system time
 def sys_time():
@@ -48,21 +48,18 @@ def processAck(sock): #function for processing the acknowledgement
                         client_window.popleft()
                 else:
                     extra_ack.append(int(d))
-                    timer(sock)
+                    retransmit(sock)
                 if len(client_window)>0:
                     print(client_window[0],"\n")
-            timer_window_resize(sock) #change window size
+            window_resize(sock) #change window size
 
 window_increment=0
 
-def timer(sock):
+def retransmit(sock):
     global window_size
     timeout_ms=5000
     global window_increment
-  #  while 1:
     i = 0
-    # if( !client_window.empty() && sys_time()-client_window[i].second>timeout_ms)
-    #if len(client_window)!=0 and sys_time() - client_window[i][1] > timeout_ms:
     if len(extra_ack)>=20: #checking for 20 out of order packets
         if len(client_window)>0:
             msg=(str(client_window[i][0])+' ').encode('utf8')
@@ -73,7 +70,7 @@ def timer(sock):
             print(f'\nSequence number "{client_window[i][0]}" retransmit from the client to the server\n')
 
 
-def timer_window_resize(sock):
+def window_resize(sock):
     global window_increment
     window_timeout_ms=3000
     maxsize=10000
@@ -103,7 +100,7 @@ if __name__ == "__main__":
     msg=("Hello Server").encode('utf8') #send hello
     s.sendall(msg)
     file1 = open("windowsize.txt", "a")  # append mode
-    file1.write("15"+","+str(sys_time())+"\n")
+    file1.write(str(window_size)+","+str(sys_time())+"\n")
     while 1:
         data=str(s.recv(1024).decode('utf8')).strip()
         if data is not None and data != "":
