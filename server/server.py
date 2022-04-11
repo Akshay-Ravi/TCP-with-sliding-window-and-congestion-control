@@ -8,12 +8,12 @@ from xxlimited import new
 import socket    
 import threading
 import random
-received_packets=deque([])
-packet_size=5
-def sys_time():
+received_packets=deque([]) #dequeue for the received packets
+packet_size=5 #setting packet size to 5
+def sys_time(): #calculating the system time
     return int(round(time.time()*1000))
-def sequence_check(current_packet):
-    if len(received_packets) == 0:
+def sequence_check(current_packet): #checking if the packets are arriving in order
+    if len(received_packets)==0: #if the queue is empty, add the current packet
         received_packets.append(current_packet)
         return
     for i in range(len(received_packets)):
@@ -21,45 +21,35 @@ def sequence_check(current_packet):
             received_packets.insert(i,current_packet)
             break
     i=0
-    while i < len(received_packets) -1:
-        if (received_packets[i]+packet_size)%65537==received_packets[i+1]:
+    while i < len(received_packets)-1:
+        if (received_packets[i]+packet_size)%65536==received_packets[i+1]: #applying the wraparound
             received_packets.popleft()
         else:
             break
-def checkIfDropped():
+def checkIfDropped(): #randomized dropping of 1 packet for every 100 packets
     x=random.randint(1,100)
     if x==100:
         return False
     else:
         return True 
 if __name__=="__main__":
-    # next create a socket object
-    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)		
+    s=socket.socket(socket.AF_INET,socket.SOCK_STREAM) #initializing the socket
     print ("Socket successfully created")
-    # reserve a port on your computer in our
-    # case it is 12345 but it can be anything
-    port=12345
-    # Next bind to the port
-    # we have not typed any ip in the ip field
-    # instead we have inputted an empty string
-    # this makes the server listen to requests
-    # coming from other computers on the network
+    port=12345 #reserving a port
     s.bind(('',port))		
     print ("socket binded to %s" %(port))
-    # put the socket into listening mode
-    s.listen(5)	
+    s.listen(5)	#put the socket into listening mode
     print ("socket is listening \n")		
-    # a forever loop until we interrupt it or
-    # an error occurs
-    c,addr=s.accept()
+    c,addr=s.accept() #connecting the the client
     print("Connection established with client %s" %(str(addr)))
-    hello_msg=c.recv(1024)
-    print(hello_msg)
+    hello_msg=c.recv(1024) #receive message from the client
+    print(hello_msg) #print the received message
     success_message="Success".encode('utf8')
-    c.sendall(success_message)
+    c.sendall(success_message) #send a success message
     no_of_packets_received=0
     no_of_packets_sent=0
     total_packets=0
+    #open the files to write the data into for getting the graphs
     file1=open("seq_number_received.txt",'a')
     file2=open("seq_number_dropped.txt",'a')
     file3=open('goodput.txt','a')
@@ -72,24 +62,23 @@ if __name__=="__main__":
         data=str(c.recv(1024).decode('utf8')).strip()
         #print(data,"\n")
         for d in data.split(' '):
-            if checkIfDropped():
-                sequence_check(int(d))
+            if checkIfDropped(): #first check if the packet has been dropped
+                sequence_check(int(d)) #call the sequence order checking function
                 print(f'\nSequence number "{d}" received\n')
                 file1.write(str(d)+','+str(sys_time())+'\n') #writing the time at which the packet was received
                 file4.write(str(len(received_packets))+','+str(sys_time())+'\n') #writing the time at which the packet was received
-                # send a thank you message to the client. encoding to send byte type.
                 msg=(str(d)+' ').encode('utf8')
                 c.sendall(msg)
-                no_of_packets_received+=1
+                no_of_packets_received+=1 #increment the number of received packets
             else:
                 file2.write(str(d)+','+str(sys_time())+'\n')
             no_of_packets_sent+=1
             total_packets+=1
-            if no_of_packets_received==1000:
+            if no_of_packets_received==1000: #calculating goodput
                 file3.write(str(no_of_packets_received)+"/"+str(no_of_packets_sent)+"="+str(no_of_packets_received/no_of_packets_sent)+"\n")
                 no_of_packets_sent=0
                 no_of_packets_received=0
-            if total_packets>=1000000: #stop the socket after 1 million packets
+            if total_packets>=10000000: #stop the socket after 10 million packets
                 file1.close()
                 file2.close()
                 file3.close()
